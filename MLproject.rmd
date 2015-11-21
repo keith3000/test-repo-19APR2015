@@ -1,0 +1,152 @@
+---
+title: "Practical Machine Learning Project"
+author: "KEITH3000"
+date: "November 15, 2015"
+output: html_document
+---
+
+##Building a machine learning algorithm to predict activity quality from activity monitors
+
+####Project Objective
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Data set). 
+
+####Data Sources
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+
+
+### Exploratory Analysis 
+```{r setup, warning=FALSE, error=FALSE}
+library(ggplot2)
+
+#read file from local directory
+motion <- read.csv("pml-training.csv")
+
+##results of the summary function are worth reviewing but is too large to print in this report.
+## summary(traindf)
+##sd <- summarize_each(motion, funs(sd))
+
+#plot distribution of classe variable
+class <- ggplot(motion, aes(x=classe, fill=classe))+
+        geom_histogram() +
+        ggtitle("distribution of dependent variable in training set")
+class
+```
+
+
+
+
+###Clean data, create test and training sets  
+```{r, echo=TRUE, warning=FALSE, error=FALSE, cache=TRUE, tidy=TRUE}
+library(dplyr); library(caret)
+
+##dimensions of training data set
+dim(motion)
+
+##remove columns for time and other variable unrelated to the quality of the exercise
+motion <- select(motion, -(1:7))
+
+##remove near zero variance columns (removes over 60 columns)
+nzv_cols <- nearZeroVar(motion)
+if(length(nzv_cols) > 0) motion <- motion[, -nzv_cols]
+
+##remove NAs - remove rows without dependent variable
+motion <- filter(motion, !is.na(classe))
+
+##remove columns with NAs
+motion <- motion[ , colSums(is.na(motion)) == 0]
+
+##convert to factor
+motion <- mutate(motion, classe=as.factor(classe))
+
+##dimensions of training data set after cleaning
+dim(motion)
+
+#create training and test sets
+inTrain <- createDataPartition(y=motion$classe, p=0.7, list=FALSE)
+training <- motion[inTrain, ]
+dim(training)
+testing <- motion[-inTrain, ]
+dim (testing)
+```
+
+
+### Create a random forest model
+
+#### Sample error and estimating the error with cross-validation 
+Error for the random forest model was estimated to be about 99% based upon in sample data and this was the casde when compared to the test data. . This is a good result for most any prediction method. I also ran a simple tree model (not shown for brevity) and the tree model performed much more poorly than the random forest model below.
+
+I used five-fold cross validation to tune the random forest model. It gave me essentially the same results as using the bootstrap validation that I used on an earlier version of the model.
+
+####good results for Random Forest - high accuracy when validated against test set
+
+```{r, echo=TRUE,cache=TRUE}
+library(caret)
+
+# create RANDOM FOREST model and print results
+rfMod <- train(training$classe~., 
+               data=training, 
+               method="rf", 
+              trControl=trainControl(method="cv",number=5), 
+             verbose=FALSE) 
+
+rfMod
+
+#save model object to working directory when needed to save computation time 
+#saveRDS(rfMod, "RandomTreesModel20NOV15.rds")
+#to read saved model, use use rfMod <- readRDS("RandomTreesModel15NOV15.rds")
+
+#create confusion matrix to assess accuracy
+pred <- (predict(rfMod, testing))
+confusionMatrix(pred, testing$classe)
+
+```
+
+
+
+###PART 2 -  TEST MODEL AGAINST GRADED TEST SET AND SUBMIT TO COURSERA
+
+###Clean final testing set before running through random forest model and submitting results for grading  
+```{r, echo=TRUE, warning=FALSE, error=FALSE, cache=TRUE, tidy=TRUE}
+library(dplyr); library(caret)
+
+##read test file from local directory
+tester <- read.csv("pml-testing.csv")
+
+##dimensions of testing data set
+dim(tester)
+
+##remove columns for time and other variable unrelated to the quality of the exercise
+tester <- select(tester, -(1:7))
+
+##remove near zero variance columns (removes over 60 columns)
+nzv_cols <- nearZeroVar(tester)
+if(length(nzv_cols) > 0) tester <- tester[, -nzv_cols]
+
+##remove columns with NAs
+tester <- tester[ , colSums(is.na(motion)) == 0]
+
+##dimensions of training data set after cleaning
+dim(tester)
+
+##run against random forest model to predict dpendent variable
+answers <- predict(rfMod, tester)
+
+##function provided for assignment
+#pml_write_files = function(x){
+#  n = length(x)
+ # for(i in 1:n){
+  #  filename = paste0("problem_id_",i,".txt")
+   # write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+ # }
+#}
+
+#pml_write_files(answers)
+```
+
+
+#### Thank you for reviewing my project. I learned a lot and am glad I took the class.
